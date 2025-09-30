@@ -11,7 +11,8 @@
 - **API**: RESTful API cho tất cả các thao tác
 
 #### Yêu cầu kỹ thuật
-- **Ngôn ngữ**: Golang (sử dụng framework Gin)
+- **Backend**: Golang (sử dụng framework Gin)
+- **Frontend**: Vue 3 với TypeScript và Vite
 - **Cơ sở dữ liệu**: PostgreSQL để lưu trữ dữ liệu
 - **Bộ nhớ đệm**: Redis để tra cứu URL hiệu suất cao
 - **Container hóa**: Docker với docker-compose
@@ -50,6 +51,7 @@ CREATE TABLE analytics (
 ```
 
 #### Kiến trúc
+- **Frontend**: Vue 3 SPA với responsive design
 - **Web Server**: Gin HTTP server
 - **Cơ sở dữ liệu**: PostgreSQL để lưu trữ
 - **Bộ nhớ đệm**: Redis để tra cứu URL nhanh
@@ -96,14 +98,16 @@ Xem `architecture-diagram.md` để biết sơ đồ chi tiết và `task2-archi
 
 ### Yêu cầu tiên quyết
 - Docker và Docker Compose
-- Go 1.21+ (cho URL shortener)
-- Node.js 18+ (cho nền tảng sản phẩm)
+- Go 1.21+ (cho URL shortener backend)
+- Node.js 18+ (cho frontend và nền tảng sản phẩm)
 - PostgreSQL 14+
 - Redis 7+
 
 ### Cài đặt và Chạy
 
 #### Dịch vụ Rút gọn URL
+
+##### Backend (Golang)
 ```bash
 # Clone repository
 git clone <repository-url>
@@ -118,6 +122,32 @@ go test ./...
 # Chạy linting
 golangci-lint run
 ```
+
+##### Frontend (Vue 3)
+```bash
+# Di chuyển vào thư mục frontend
+cd frontend
+
+# Cài đặt dependencies
+npm install
+
+# Khởi động development server
+npm run dev
+
+# Build cho production
+npm run build
+
+# Chạy linting
+npm run lint
+```
+
+##### Tính năng Frontend
+- **URL Shortener**: Giao diện rút gọn URL với copy to clipboard
+- **Analytics Dashboard**: Biểu đồ thống kê và phân tích chi tiết
+- **Health Check**: Theo dõi sức khỏe hệ thống real-time
+- **Load Testing**: Công cụ kiểm thử tải với cấu hình linh hoạt
+- **Bulk Operations**: Thao tác hàng loạt với export CSV
+- **Responsive Design**: Tối ưu cho mobile và desktop
 
 #### Nền tảng Sản phẩm
 ```bash
@@ -137,9 +167,21 @@ npm run build
 ## Triển khai
 
 ### Triển khai Docker
+
+#### Backend và Database
 ```bash
 # Build và chạy với Docker Compose
 docker-compose -f docker-compose.prod.yml up -d
+```
+
+#### Frontend
+```bash
+# Build Docker image cho frontend
+cd frontend
+docker build -t url-shortener-frontend .
+
+# Chạy container
+docker run -p 80:80 url-shortener-frontend
 ```
 
 ### Triển khai Kubernetes
@@ -151,7 +193,8 @@ kubectl apply -f k8s/
 ## Giám sát và Phân tích
 
 ### Kiểm tra sức khỏe
-- URL Shortener: `GET /api/v1/health`
+- URL Shortener Backend: `GET /api/v1/health`
+- URL Shortener Frontend: `http://localhost:3000` (development) hoặc `http://localhost:80` (production)
 - Nền tảng Sản phẩm: `GET /api/health`
 
 ### Metrics
@@ -159,6 +202,8 @@ kubectl apply -f k8s/
 - Trạng thái connection pool cơ sở dữ liệu
 - Tỷ lệ cache hit/miss
 - Tỷ lệ lỗi và loại lỗi
+- Frontend performance metrics (load time, bundle size)
+- User interaction analytics (click tracking, usage patterns)
 
 ## Đóng góp
 
