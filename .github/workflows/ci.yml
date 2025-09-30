@@ -52,28 +52,45 @@ jobs:
           ${{ runner.os }}-go-
 
     - name: Install dependencies
-      run: go mod download
+      run: |
+        go mod download
+        go mod tidy
 
     - name: Run linter
       uses: golangci/golangci-lint-action@v3
       with:
         version: latest
+        args: --timeout=5m
 
     - name: Run tests
-      run: go test -v ./...
+      run: |
+        go test -v -race -coverprofile=coverage.out ./...
+        go tool cover -html=coverage.out -o coverage.html
       env:
         DATABASE_URL: postgres://user:password@localhost:5432/urlshortener?sslmode=disable
         REDIS_URL: redis://localhost:6379
+        CGO_ENABLED: 1
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.out
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
 
     - name: Build application
-      run: go build -o url-shortener .
+      run: |
+        go build -o url-shortener .
+        go build -o url-shortener-linux -v .
 
     - name: Run integration tests
       run: |
-        go test -v -tags=integration ./...
+        go test -v -tags=integration -timeout=60s ./...
       env:
         DATABASE_URL: postgres://user:password@localhost:5432/urlshortener?sslmode=disable
         REDIS_URL: redis://localhost:6379
+        CGO_ENABLED: 1
 
   docker:
     runs-on: ubuntu-latest

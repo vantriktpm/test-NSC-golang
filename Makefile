@@ -1,95 +1,120 @@
-.PHONY: build test lint docker-build docker-run clean help
+# Go parameters
+GOCMD=go
+GOBUILD=$(GOCMD) build
+GOCLEAN=$(GOCMD) clean
+GOTEST=$(GOCMD) test
+GOGET=$(GOCMD) get
+GOMOD=$(GOCMD) mod
+BINARY_NAME=url-shortener
+BINARY_UNIX=$(BINARY_NAME)_unix
 
-# Variables
-APP_NAME=url-shortener
-DOCKER_IMAGE=$(APP_NAME):latest
-DOCKER_COMPOSE_FILE=docker-compose.yml
+# Docker parameters
+DOCKER_IMAGE=url-shortener
+DOCKER_TAG=latest
 
-# Default target
-help: ## Show this help message
-	@echo 'Usage: make [target]'
-	@echo ''
-	@echo 'Targets:'
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+# Test parameters
+TEST_TIMEOUT=30s
+COVERAGE_FILE=coverage.out
+COVERAGE_HTML=coverage.html
 
-build: ## Build the application
-	go build -o $(APP_NAME) .
+.PHONY: all build clean test coverage lint docker-build docker-run help
 
-test: ## Run tests
-	go test -v ./...
+all: clean test build
 
-test-coverage: ## Run tests with coverage
-	go test -v -coverprofile=coverage.out ./...
-	go tool cover -html=coverage.out -o coverage.html
+# Build the application
+build:
+	$(GOBUILD) -o $(BINARY_NAME) -v .
 
-lint: ## Run linter
+# Build for Linux
+build-linux:
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINARY_UNIX) -v .
+
+# Clean build artifacts
+clean:
+	$(GOCLEAN)
+	rm -f $(BINARY_NAME)
+	rm -f $(BINARY_UNIX)
+	rm -f $(COVERAGE_FILE)
+	rm -f $(COVERAGE_HTML)
+
+# Run tests
+test:
+	$(GOTEST) -v -timeout $(TEST_TIMEOUT) ./...
+
+# Run tests with race detection
+test-race:
+	$(GOTEST) -v -race -timeout $(TEST_TIMEOUT) ./...
+
+# Run tests with coverage
+coverage:
+	$(GOTEST) -v -race -coverprofile=$(COVERAGE_FILE) ./...
+	$(GOCMD) tool cover -html=$(COVERAGE_FILE) -o $(COVERAGE_HTML)
+
+# Run tests with coverage and open in browser (macOS)
+coverage-open: coverage
+	open $(COVERAGE_HTML)
+
+# Run linter
+lint:
 	golangci-lint run
 
-fmt: ## Format code
-	go fmt ./...
+# Install dependencies
+deps:
+	$(GOMOD) download
+	$(GOMOD) tidy
 
-vet: ## Run go vet
-	go vet ./...
+# Install linter
+install-linter:
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell go env GOPATH)/bin v1.54.2
 
-deps: ## Download dependencies
-	go mod download
-	go mod tidy
+# Format code
+fmt:
+	$(GOCMD) fmt ./...
 
-docker-build: ## Build Docker image
-	docker build -t $(DOCKER_IMAGE) .
+# Run the application
+run:
+	$(GOCMD) run .
 
-docker-run: ## Run Docker container
-	docker run --rm -p 8080:8080 \
-		-e DATABASE_URL=postgres://user:password@host.docker.internal:5432/urlshortener?sslmode=disable \
-		-e REDIS_URL=redis://host.docker.internal:6379 \
-		$(DOCKER_IMAGE)
+# Docker commands
+docker-build:
+	docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
 
-docker-compose-up: ## Start services with Docker Compose
-	docker-compose -f $(DOCKER_COMPOSE_FILE) up -d
+docker-run:
+	docker run -p 8080:8080 $(DOCKER_IMAGE):$(DOCKER_TAG)
 
-docker-compose-down: ## Stop services with Docker Compose
-	docker-compose -f $(DOCKER_COMPOSE_FILE) down
+docker-compose-up:
+	docker-compose up --build -d
 
-docker-compose-logs: ## View Docker Compose logs
-	docker-compose -f $(DOCKER_COMPOSE_FILE) logs -f
+docker-compose-down:
+	docker-compose down
 
-dev: ## Start development environment
-	docker-compose -f $(DOCKER_COMPOSE_FILE) up -d postgres redis
-	@echo "Waiting for services to be ready..."
-	@sleep 10
-	@echo "Starting application..."
-	@DATABASE_URL=postgres://user:password@localhost:5432/urlshortener?sslmode=disable \
-	 REDIS_URL=redis://localhost:6379 \
-	 go run .
+# Load testing
+load-test:
+	$(GOCMD) run test-6000-requests-go.go
 
-k8s-apply: ## Apply Kubernetes configurations
-	kubectl apply -f k8s/
-
-k8s-delete: ## Delete Kubernetes resources
-	kubectl delete -f k8s/
-
-k8s-status: ## Check Kubernetes deployment status
-	kubectl get pods -n url-shortener
-	kubectl get services -n url-shortener
-	kubectl get ingress -n url-shortener
-
-clean: ## Clean build artifacts
-	rm -f $(APP_NAME)
-	rm -f coverage.out coverage.html
-	docker rmi $(DOCKER_IMAGE) 2>/dev/null || true
-
-install-tools: ## Install development tools
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
-
-security-scan: ## Run security scan
+# Security scan
+security:
 	gosec ./...
 
-benchmark: ## Run benchmarks
-	go test -bench=. -benchmem ./...
-
-load-test: ## Run load tests (requires hey tool)
-	@which hey > /dev/null || (echo "Please install hey: go install github.com/rakyll/hey@latest" && exit 1)
-	hey -n 1000 -c 10 http://localhost:8080/api/v1/health
-
-all: clean deps fmt vet lint test build ## Run all checks and build
+# Help
+help:
+	@echo "Available commands:"
+	@echo "  build          - Build the application"
+	@echo "  build-linux    - Build for Linux"
+	@echo "  clean          - Clean build artifacts"
+	@echo "  test           - Run tests"
+	@echo "  test-race      - Run tests with race detection"
+	@echo "  coverage       - Run tests with coverage"
+	@echo "  coverage-open  - Run tests with coverage and open in browser"
+	@echo "  lint           - Run linter"
+	@echo "  deps           - Install dependencies"
+	@echo "  install-linter - Install golangci-lint"
+	@echo "  fmt            - Format code"
+	@echo "  run            - Run the application"
+	@echo "  docker-build   - Build Docker image"
+	@echo "  docker-run     - Run Docker container"
+	@echo "  docker-compose-up   - Start with docker-compose"
+	@echo "  docker-compose-down - Stop docker-compose"
+	@echo "  load-test      - Run load test"
+	@echo "  security       - Run security scan"
+	@echo "  help           - Show this help"

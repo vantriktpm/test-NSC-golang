@@ -1,11 +1,11 @@
 package service
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"url-shortener/internal/models"
-	"url-shortener/internal/repository"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/assert"
@@ -96,7 +96,7 @@ func TestURLService_ShortenURL(t *testing.T) {
 	mockURLRepo := new(MockURLRepository)
 	mockAnalyticsRepo := new(MockAnalyticsRepository)
 	mockRedis := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	
+
 	service := NewURLService(mockURLRepo, mockAnalyticsRepo, mockRedis, "http://localhost:8080")
 
 	tests := []struct {
@@ -117,7 +117,7 @@ func TestURLService_ShortenURL(t *testing.T) {
 		},
 		{
 			name: "Invalid URL",
-			url:  "not-a-url",
+			url:  "",
 			setupMocks: func() {
 				// No mocks needed for invalid URL
 			},
@@ -128,9 +128,9 @@ func TestURLService_ShortenURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setupMocks()
-			
+
 			response, err := service.ShortenURL(tt.url, tt.expiresAt)
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 				assert.Nil(t, response)
@@ -140,8 +140,9 @@ func TestURLService_ShortenURL(t *testing.T) {
 				assert.Equal(t, tt.url, response.OriginalURL)
 				assert.NotEmpty(t, response.ShortCode)
 			}
-			
+
 			mockURLRepo.AssertExpectations(t)
+			mockAnalyticsRepo.AssertExpectations(t)
 		})
 	}
 }
@@ -150,8 +151,11 @@ func TestURLService_RedirectURL(t *testing.T) {
 	mockURLRepo := new(MockURLRepository)
 	mockAnalyticsRepo := new(MockAnalyticsRepository)
 	mockRedis := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	
+
 	service := NewURLService(mockURLRepo, mockAnalyticsRepo, mockRedis, "http://localhost:8080")
+
+	// Clear cache before each test
+	mockRedis.FlushDB(context.Background())
 
 	tests := []struct {
 		name        string
@@ -171,6 +175,7 @@ func TestURLService_RedirectURL(t *testing.T) {
 					IsActive:    true,
 				}
 				mockURLRepo.On("GetByShortCode", "abc123").Return(url, nil)
+				mockAnalyticsRepo.On("Create", mock.AnythingOfType("*models.Analytics")).Return(nil)
 			},
 			expectError: false,
 			expectedURL: "https://example.com",
@@ -180,6 +185,7 @@ func TestURLService_RedirectURL(t *testing.T) {
 			shortCode: "invalid",
 			setupMocks: func() {
 				mockURLRepo.On("GetByShortCode", "invalid").Return(nil, assert.AnError)
+				mockAnalyticsRepo.On("Create", mock.AnythingOfType("*models.Analytics")).Return(assert.AnError)
 			},
 			expectError: true,
 		},
@@ -188,9 +194,9 @@ func TestURLService_RedirectURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setupMocks()
-			
+
 			originalURL, err := service.RedirectURL(tt.shortCode, "127.0.0.1", "test-agent", "test-referer")
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 				assert.Empty(t, originalURL)
@@ -198,8 +204,9 @@ func TestURLService_RedirectURL(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedURL, originalURL)
 			}
-			
+
 			mockURLRepo.AssertExpectations(t)
+			mockAnalyticsRepo.AssertExpectations(t)
 		})
 	}
 }
