@@ -1,0 +1,12 @@
+{
+  "name": "url-shortener-load-test",
+  "version": "1.0.0",
+  "description": "Load testing script for URL Shortener API",
+  "main": "test-6000-requests-node.js",
+  "scripts": {
+    "test": "node test-6000-requests-node.js"
+  },
+  "keywords": ["load-test", "api", "performance"],
+  "author": "",
+  "license": "MIT"
+}

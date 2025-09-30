@@ -1,0 +1,173 @@
+# Bài Tập Fullstack Engineer
+
+## Nhiệm vụ 1: Dịch vụ Rút gọn URL với Phân tích
+
+### Yêu cầu và Thông số kỹ thuật
+
+#### Tính năng cốt lõi
+- **Rút gọn URL**: Chuyển đổi URL dài thành liên kết ngắn, có thể chia sẻ
+- **Chuyển hướng URL**: Chuyển hướng URL ngắn về URL gốc
+- **Phân tích**: Theo dõi thống kê lượt click và các chỉ số sử dụng cơ bản
+- **API**: RESTful API cho tất cả các thao tác
+
+#### Yêu cầu kỹ thuật
+- **Ngôn ngữ**: Golang (sử dụng framework Gin)
+- **Cơ sở dữ liệu**: PostgreSQL để lưu trữ dữ liệu
+- **Bộ nhớ đệm**: Redis để tra cứu URL hiệu suất cao
+- **Container hóa**: Docker với docker-compose
+- **CI/CD**: GitHub Actions cho linting và testing
+- **Tùy chọn**: Cấu hình triển khai Kubernetes
+
+#### Các endpoint API
+```
+POST /api/v1/shorten     - Tạo URL ngắn
+GET  /{shortCode}        - Chuyển hướng về URL gốc
+GET  /api/v1/analytics/{shortCode} - Lấy phân tích cho URL ngắn
+GET  /api/v1/health      - Kiểm tra sức khỏe
+```
+
+#### Schema cơ sở dữ liệu
+```sql
+-- Bảng URLs
+CREATE TABLE urls (
+    id SERIAL PRIMARY KEY,
+    short_code VARCHAR(10) UNIQUE NOT NULL,
+    original_url TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP,
+    is_active BOOLEAN DEFAULT TRUE
+);
+
+-- Bảng Analytics
+CREATE TABLE analytics (
+    id SERIAL PRIMARY KEY,
+    url_id INTEGER REFERENCES urls(id),
+    ip_address INET,
+    user_agent TEXT,
+    referer TEXT,
+    clicked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### Kiến trúc
+- **Web Server**: Gin HTTP server
+- **Cơ sở dữ liệu**: PostgreSQL để lưu trữ
+- **Bộ nhớ đệm**: Redis để tra cứu URL nhanh
+- **Load Balancer**: Nginx (cho production)
+- **Giám sát**: Kiểm tra sức khỏe cơ bản và metrics
+
+## Nhiệm vụ 2: Kiến trúc Nền tảng Bán sản phẩm
+
+### Yêu cầu hệ thống
+- **Người dùng đồng thời**: 6000 yêu cầu đồng thời
+- **Máy chủ**: Tối đa 6 máy chủ (3 cho cơ sở dữ liệu)
+- **Kết nối cơ sở dữ liệu**: 300 kết nối đồng thời mỗi cơ sở dữ liệu
+- **Tính nhất quán dữ liệu**: Ngăn chặn bán quá số lượng (nhất quán kho)
+- **Phản hồi thời gian thực**: Phản hồi độ trễ thấp
+- **Tính sẵn sàng cao**: Không có điểm lỗi đơn lẻ
+- **Khả năng mở rộng**: Dễ dàng mở rộng khi tăng trưởng
+
+### Stack công nghệ
+- **Frontend**: React.js với cập nhật thời gian thực
+- **Backend**: Node.js với Express.js
+- **Cơ sở dữ liệu**: PostgreSQL (chính) + Redis (cache)
+- **Hàng đợi tin nhắn**: Redis Pub/Sub cho cập nhật thời gian thực
+- **Load Balancer**: Nginx
+- **CDN**: CloudFlare cho tài sản tĩnh
+- **Giám sát**: Prometheus + Grafana
+
+### Thiết kế kiến trúc
+Xem `architecture-diagram.md` để biết sơ đồ chi tiết và `task2-architecture.md` để biết tài liệu kiến trúc đầy đủ.
+
+### Luồng hệ thống
+1. **Xem sản phẩm**: Thao tác đọc nhanh với Redis caching
+2. **Luồng mua hàng**: Distributed locking để ngăn chặn bán quá số lượng
+3. **Cập nhật thời gian thực**: Kết nối WebSocket cho cập nhật kho trực tiếp
+4. **Tính nhất quán dữ liệu**: Optimistic locking với cơ chế retry
+
+### Tính năng chính
+- **Distributed Locking**: Khóa dựa trên Redis cho quản lý kho
+- **Cập nhật thời gian thực**: WebSocket + Redis Pub/Sub cho thay đổi kho trực tiếp
+- **Tính sẵn sàng cao**: Dự phòng đa tầng với failover tự động
+- **Khả năng mở rộng**: Mở rộng ngang với máy chủ ứng dụng stateless
+- **Hiệu suất**: Tỷ lệ cache hit 90%+ với thời gian phản hồi dưới 100ms
+
+## Bắt đầu
+
+### Yêu cầu tiên quyết
+- Docker và Docker Compose
+- Go 1.21+ (cho URL shortener)
+- Node.js 18+ (cho nền tảng sản phẩm)
+- PostgreSQL 14+
+- Redis 7+
+
+### Cài đặt và Chạy
+
+#### Dịch vụ Rút gọn URL
+```bash
+# Clone repository
+git clone <repository-url>
+cd url-shortener
+
+# Khởi động các dịch vụ với Docker Compose
+docker-compose up -d
+
+# Chạy tests
+go test ./...
+
+# Chạy linting
+golangci-lint run
+```
+
+#### Nền tảng Sản phẩm
+```bash
+# Cài đặt dependencies
+npm install
+
+# Khởi động development server
+npm run dev
+
+# Chạy tests
+npm test
+
+# Build cho production
+npm run build
+```
+
+## Triển khai
+
+### Triển khai Docker
+```bash
+# Build và chạy với Docker Compose
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+### Triển khai Kubernetes
+```bash
+# Áp dụng cấu hình Kubernetes
+kubectl apply -f k8s/
+```
+
+## Giám sát và Phân tích
+
+### Kiểm tra sức khỏe
+- URL Shortener: `GET /api/v1/health`
+- Nền tảng Sản phẩm: `GET /api/health`
+
+### Metrics
+- Số lượng yêu cầu và thời gian phản hồi
+- Trạng thái connection pool cơ sở dữ liệu
+- Tỷ lệ cache hit/miss
+- Tỷ lệ lỗi và loại lỗi
+
+## Đóng góp
+
+1. Fork repository
+2. Tạo feature branch
+3. Thực hiện thay đổi
+4. Thêm tests
+5. Gửi pull request
+
+## Giấy phép
+
+MIT License
