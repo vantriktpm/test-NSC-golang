@@ -88,6 +88,22 @@ docker-compose-up:
 docker-compose-down:
 	docker-compose down
 
+docker-compose-logs:
+	docker-compose logs -f
+
+docker-compose-restart:
+	docker-compose restart
+
+# Frontend specific commands
+frontend-build:
+	cd frontend && npm ci && npm run build
+
+frontend-dev:
+	cd frontend && npm run dev
+
+frontend-install:
+	cd frontend && npm install
+
 # Load testing
 load-test:
 	$(GOCMD) run test-6000-requests-go.go
@@ -115,6 +131,11 @@ help:
 	@echo "  docker-run     - Run Docker container"
 	@echo "  docker-compose-up   - Start with docker-compose"
 	@echo "  docker-compose-down - Stop docker-compose"
+	@echo "  docker-compose-logs - Show docker-compose logs"
+	@echo "  docker-compose-restart - Restart docker-compose services"
+	@echo "  frontend-build  - Build frontend"
+	@echo "  frontend-dev    - Run frontend in development mode"
+	@echo "  frontend-install - Install frontend dependencies"
 	@echo "  load-test      - Run load test"
 	@echo "  security       - Run security scan"
 	@echo "  help           - Show this help"

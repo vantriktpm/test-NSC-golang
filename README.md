@@ -107,23 +107,41 @@ Xem `architecture-diagram.md` để biết sơ đồ chi tiết và `task2-archi
 
 #### Dịch vụ Rút gọn URL
 
-##### Backend (Golang)
+##### Full Stack với Docker Compose
 ```bash
 # Clone repository
 git clone <repository-url>
 cd url-shortener
 
-# Khởi động các dịch vụ với Docker Compose
-docker-compose up -d
+# Khởi động tất cả services (Backend + Frontend + Database + Redis)
+docker-compose up --build -d
 
+# Kiểm tra logs
+docker-compose logs -f
+
+# Dừng services
+docker-compose down
+```
+
+**Services sẽ chạy trên:**
+- **Backend API**: http://localhost:8080
+- **Frontend**: http://localhost:3000
+- **PostgreSQL**: localhost:5432
+- **Redis**: localhost:6379
+
+##### Backend (Golang) - Development
+```bash
 # Chạy tests
 go test ./...
 
 # Chạy linting
 golangci-lint run
+
+# Chạy load test
+go run test-6000-requests-go.go
 ```
 
-##### Frontend (Vue 3)
+##### Frontend (Vue 3) - Development
 ```bash
 # Di chuyển vào thư mục frontend
 cd frontend
@@ -139,6 +157,33 @@ npm run build
 
 # Chạy linting
 npm run lint
+```
+
+##### Makefile Commands
+```bash
+# Khởi động full stack
+make docker-compose-up
+
+# Dừng services
+make docker-compose-down
+
+# Xem logs
+make docker-compose-logs
+
+# Restart services
+make docker-compose-restart
+
+# Build frontend
+make frontend-build
+
+# Chạy frontend development
+make frontend-dev
+
+# Chạy load test
+make load-test
+
+# Xem tất cả commands
+make help
 ```
 
 ##### Tính năng Frontend
@@ -185,10 +230,27 @@ docker run -p 80:80 url-shortener-frontend
 ```
 
 ### Triển khai Kubernetes
+
+#### Thiết lập Kubernetes Local
+```bash
+# Thiết lập cluster local (Windows)
+.\setup-k8s-local.ps1
+
+# Triển khai ứng dụng
+.\deploy-k8s-local.ps1
+```
+
+#### Triển khai thủ công
 ```bash
 # Áp dụng cấu hình Kubernetes
 kubectl apply -f k8s/
+
+# Kiểm tra trạng thái
+kubectl get pods -n url-shortener
+kubectl get services -n url-shortener
 ```
+
+**Lưu ý**: Xem `K8S-LOCAL-SETUP.md` để biết hướng dẫn chi tiết thiết lập Kubernetes local.
 
 ## Giám sát và Phân tích
 
