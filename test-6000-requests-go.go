@@ -38,6 +38,7 @@ type TestResult struct {
 }
 
 func main() {
+	// GitHub Actions Test - Trigger CI/CD Pipeline
 	fmt.Println("🚀 Bắt đầu test 6000 requests cho API URL Shortener")
 	fmt.Printf("Base URL: %s\n", baseURL)
 	fmt.Printf("Total requests: %d\n", totalRequests)
