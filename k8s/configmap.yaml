@@ -4,6 +4,6 @@ metadata:
   name: url-shortener-config
   namespace: url-shortener
 data:
-  BASE_URL: "https://your-domain.com"
+  BASE_URL: "http://localhost:8080"
   ENVIRONMENT: "production"
   PORT: "8080"

@@ -95,9 +95,36 @@ jobs:
         REDIS_URL: redis://localhost:6379
         CGO_ENABLED: 1
 
-  docker:
+  test-6000-request-300-users:
     runs-on: ubuntu-latest
     needs: test
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Start services with docker-compose
+      run: |
+        docker-compose up -d
+        sleep 30
+
+    - name: Run 6000 requests load test with 300 users
+      run: |
+        go run test-6000-requests-go.go
+      env:
+        BASE_URL: http://localhost:8080
+
+    - name: Stop services
+      run: |
+        docker-compose down
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test-6000-request-300-users
     
     steps:
     - uses: actions/checkout@v4

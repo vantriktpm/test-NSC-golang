@@ -12,7 +12,7 @@ import (
 const (
 	baseURL         = "http://localhost:8080"
 	totalRequests   = 6000
-	concurrentUsers = 100
+	concurrentUsers = 300
 )
 
 type ShortenRequest struct {
@@ -43,6 +43,7 @@ func main() {
 	fmt.Printf("Base URL: %s\n", baseURL)
 	fmt.Printf("Total requests: %d\n", totalRequests)
 	fmt.Printf("Concurrent users: %d\n", concurrentUsers)
+	fmt.Printf("Requests per user: %d\n", totalRequests/concurrentUsers)
 	fmt.Println("==========================================")
 
 	// Test 1: Health Check
