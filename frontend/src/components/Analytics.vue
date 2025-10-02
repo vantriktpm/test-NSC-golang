@@ -59,71 +59,76 @@
         <h3>📈 Click Statistics</h3>
         <div class="stats-grid">
           <div class="stats-card">
-            <h3>{{ analytics.clickCount }}</h3>
+            <h3>{{ analytics.totalClicks }}</h3>
             <p>Total Clicks</p>
           </div>
           <div class="stats-card">
-            <h3>{{ analytics.clickCount > 0 ? 'Active' : 'Inactive' }}</h3>
+            <h3>{{ analytics.uniqueIPs }}</h3>
+            <p>Unique IPs</p>
+          </div>
+          <div class="stats-card">
+            <h3>{{ analytics.totalClicks > 0 ? 'Active' : 'Inactive' }}</h3>
             <p>Status</p>
           </div>
         </div>
       </div>
 
-      <!-- Daily Stats Chart -->
-      <div v-if="analytics.dailyStats.length > 0" class="card">
-        <h3>📅 Daily Click Statistics</h3>
+      <!-- Recent Clicks Chart -->
+      <div v-if="analytics.recentClicks && analytics.recentClicks.length > 0" class="card">
+        <h3>📅 Recent Click Activity</h3>
         <div class="chart-container">
           <div class="chart">
             <div 
-              v-for="(stat, index) in analytics.dailyStats" 
+              v-for="(click, index) in analytics.recentClicks" 
               :key="index"
               class="chart-bar"
-              :style="{ height: getBarHeight(stat.clicks) + '%' }"
-              :title="`${stat.date}: ${stat.clicks} clicks`"
+              :style="{ height: getBarHeight(1) + '%' }"
+              :title="`${formatDate(click.clickedAt)}: ${click.ipAddress}`"
             >
-              <span class="chart-value">{{ stat.clicks }}</span>
+              <span class="chart-value">1</span>
             </div>
           </div>
           <div class="chart-labels">
             <span 
-              v-for="(stat, index) in analytics.dailyStats" 
+              v-for="(click, index) in analytics.recentClicks" 
               :key="index"
               class="chart-label"
             >
-              {{ formatDateShort(stat.date) }}
+              {{ formatDateShort(click.clickedAt) }}
             </span>
           </div>
         </div>
       </div>
 
       <!-- Top Referrers -->
-      <div v-if="analytics.topReferrers.length > 0" class="card">
+      <div v-if="analytics.topReferers && analytics.topReferers.length > 0" class="card">
         <h3>🔗 Top Referrers</h3>
         <div class="list-container">
           <div 
-            v-for="(referrer, index) in analytics.topReferrers" 
+            v-for="(referrer, index) in analytics.topReferers" 
             :key="index"
             class="list-item"
           >
             <span class="rank">#{{ index + 1 }}</span>
-            <span class="name">{{ referrer.referrer || 'Direct' }}</span>
+            <span class="name">{{ referrer.referer || 'Direct' }}</span>
             <span class="count">{{ referrer.count }} clicks</span>
           </div>
         </div>
       </div>
 
-      <!-- Top User Agents -->
-      <div v-if="analytics.topUserAgents.length > 0" class="card">
-        <h3>📱 Top User Agents</h3>
+      <!-- Recent Clicks List -->
+      <div v-if="analytics.recentClicks && analytics.recentClicks.length > 0" class="card">
+        <h3>📱 Recent Clicks</h3>
         <div class="list-container">
           <div 
-            v-for="(ua, index) in analytics.topUserAgents" 
+            v-for="(click, index) in analytics.recentClicks" 
             :key="index"
             class="list-item"
           >
             <span class="rank">#{{ index + 1 }}</span>
-            <span class="name">{{ formatUserAgent(ua.userAgent) }}</span>
-            <span class="count">{{ ua.count }} clicks</span>
+            <span class="name">{{ formatUserAgent(click.userAgent) }}</span>
+            <span class="count">{{ click.ipAddress }}</span>
+            <span class="date">{{ formatDate(click.clickedAt) }}</span>
           </div>
         </div>
       </div>
@@ -179,8 +184,8 @@ const formatUserAgent = (userAgent: string) => {
 
 const getBarHeight = (clicks: number) => {
   if (!analytics.value) return 0
-  const maxClicks = Math.max(...analytics.value.dailyStats.map(s => s.clicks))
-  return maxClicks > 0 ? (clicks / maxClicks) * 100 : 0
+  // For recent clicks, we show each click as a bar with minimum height
+  return Math.max(20, (clicks / 1) * 100)
 }
 </script>
 
@@ -319,6 +324,13 @@ const getBarHeight = (clicks: number) => {
   padding: 4px 8px;
   border-radius: 12px;
   font-size: 0.9rem;
+}
+
+.date {
+  font-weight: 500;
+  color: #666;
+  font-size: 0.8rem;
+  font-family: 'Courier New', monospace;
 }
 
 @media (max-width: 768px) {

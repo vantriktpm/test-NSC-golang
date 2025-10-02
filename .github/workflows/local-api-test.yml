@@ -1,0 +1,137 @@
+name: Local API Testing
+
+on:
+  workflow_dispatch:
+    inputs:
+      local_api_url:
+        description: 'Local API URL (e.g., https://abc123.ngrok.io)'
+        required: true
+        type: string
+      test_type:
+        description: 'Test type'
+        required: true
+        default: 'health'
+        type: choice
+        options:
+        - health
+        - shorten
+        - analytics
+        - load-test
+        - all
+
+jobs:
+  test-local-api:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Test Health Endpoint
+      if: ${{ inputs.test_type == 'health' || inputs.test_type == 'all' }}
+      run: |
+        echo "Testing health endpoint..."
+        curl -f "${{ inputs.local_api_url }}/api/v1/health" || exit 1
+        echo "✅ Health check passed"
+
+    - name: Test Shorten URL
+      if: ${{ inputs.test_type == 'shorten' || inputs.test_type == 'all' }}
+      run: |
+        echo "Testing shorten URL endpoint..."
+        response=$(curl -s -X POST "${{ inputs.local_api_url }}/api/v1/shorten" \
+          -H "Content-Type: application/json" \
+          -d '{"url": "https://example.com"}')
+        echo "Response: $response"
+        
+        # Extract short_code from response
+        short_code=$(echo $response | jq -r '.short_code')
+        if [ "$short_code" = "null" ] || [ -z "$short_code" ]; then
+          echo "❌ Failed to get short_code"
+          exit 1
+        fi
+        echo "✅ Shorten URL test passed, short_code: $short_code"
+        
+        # Store short_code for analytics test
+        echo "SHORT_CODE=$short_code" >> $GITHUB_ENV
+
+    - name: Test Analytics
+      if: ${{ inputs.test_type == 'analytics' || inputs.test_type == 'all' }}
+      run: |
+        echo "Testing analytics endpoint..."
+        if [ -z "$SHORT_CODE" ]; then
+          echo "No short_code available, creating one first..."
+          response=$(curl -s -X POST "${{ inputs.local_api_url }}/api/v1/shorten" \
+            -H "Content-Type: application/json" \
+            -d '{"url": "https://example.com"}')
+          SHORT_CODE=$(echo $response | jq -r '.short_code')
+        fi
+        
+        curl -f "${{ inputs.local_api_url }}/api/v1/analytics/$SHORT_CODE" || exit 1
+        echo "✅ Analytics test passed"
+
+    - name: Test Redirect
+      if: ${{ inputs.test_type == 'all' }}
+      run: |
+        echo "Testing redirect..."
+        if [ -z "$SHORT_CODE" ]; then
+          echo "No short_code available, creating one first..."
+          response=$(curl -s -X POST "${{ inputs.local_api_url }}/api/v1/shorten" \
+            -H "Content-Type: application/json" \
+            -d '{"url": "https://example.com"}')
+          SHORT_CODE=$(echo $response | jq -r '.short_code')
+        fi
+        
+        # Test redirect (should return 302)
+        status_code=$(curl -s -o /dev/null -w "%{http_code}" "${{ inputs.local_api_url }}/$SHORT_CODE")
+        if [ "$status_code" = "302" ] || [ "$status_code" = "301" ]; then
+          echo "✅ Redirect test passed (status: $status_code)"
+        else
+          echo "❌ Redirect test failed (status: $status_code)"
+          exit 1
+        fi
+
+    - name: Load Test
+      if: ${{ inputs.test_type == 'load-test' || inputs.test_type == 'all' }}
+      run: |
+        echo "Running load test against local API..."
+        # Create a simple load test script
+        cat > load_test.sh << 'EOF'
+        #!/bin/bash
+        API_URL="$1"
+        REQUESTS=100
+        CONCURRENCY=10
+        
+        echo "Testing $REQUESTS requests with $CONCURRENCY concurrent connections..."
+        
+        # Test health endpoint
+        for i in $(seq 1 $REQUESTS); do
+          curl -s "$API_URL/api/v1/health" > /dev/null &
+          if (( i % CONCURRENCY == 0 )); then
+            wait
+          fi
+        done
+        wait
+        
+        echo "✅ Load test completed"
+        EOF
+        
+        chmod +x load_test.sh
+        ./load_test.sh "${{ inputs.local_api_url }}"
+
+    - name: Generate Test Report
+      if: always()
+      run: |
+        echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "**Local API URL:** ${{ inputs.local_api_url }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Test Type:** ${{ inputs.test_type }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Available Endpoints:" >> $GITHUB_STEP_SUMMARY
+        echo "- Health: \`GET ${{ inputs.local_api_url }}/api/v1/health\`" >> $GITHUB_STEP_SUMMARY
+        echo "- Shorten: \`POST ${{ inputs.local_api_url }}/api/v1/shorten\`" >> $GITHUB_STEP_SUMMARY
+        echo "- Analytics: \`GET ${{ inputs.local_api_url }}/api/v1/analytics/{shortCode}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- Redirect: \`GET ${{ inputs.local_api_url }}/{shortCode}\`" >> $GITHUB_STEP_SUMMARY

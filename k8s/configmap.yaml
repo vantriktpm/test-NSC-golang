@@ -7,3 +7,4 @@ data:
   BASE_URL: "http://localhost:8080"
   ENVIRONMENT: "production"
   PORT: "8080"
+  FRONTEND_API_URL: "http://url-shortener-service:80"

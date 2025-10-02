@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"url-shortener/internal/models"
@@ -19,6 +20,8 @@ type URLService interface {
 	ShortenURL(originalURL string, expiresAt *time.Time) (*models.ShortenResponse, error)
 	RedirectURL(shortCode string, ipAddress, userAgent, referer string) (string, error)
 	GetAnalytics(shortCode string) (*models.AnalyticsResponse, error)
+	StartPreGeneration() error
+	StopPreGeneration()
 }
 
 type urlService struct {
@@ -26,6 +29,16 @@ type urlService struct {
 	analyticsRepo repository.AnalyticsRepository
 	redisClient   *redis.Client
 	baseURL       string
+
+	// Pre-generation management
+	preGenMutex     sync.RWMutex
+	stopPreGen      chan bool
+	isPreGenRunning bool
+
+	// Configuration
+	minPoolSize     int
+	maxPoolSize     int
+	preGenBatchSize int
 }
 
 func NewURLService(
@@ -35,10 +48,14 @@ func NewURLService(
 	baseURL string,
 ) URLService {
 	return &urlService{
-		urlRepo:       urlRepo,
-		analyticsRepo: analyticsRepo,
-		redisClient:   redisClient,
-		baseURL:       baseURL,
+		urlRepo:         urlRepo,
+		analyticsRepo:   analyticsRepo,
+		redisClient:     redisClient,
+		baseURL:         baseURL,
+		stopPreGen:      make(chan bool),
+		minPoolSize:     100,  // Minimum pool size
+		maxPoolSize:     1000, // Maximum pool size
+		preGenBatchSize: 50,   // Batch size for pre-generation
 	}
 }
 
@@ -48,18 +65,44 @@ func (s *urlService) ShortenURL(originalURL string, expiresAt *time.Time) (*mode
 		return nil, fmt.Errorf("invalid URL format")
 	}
 
-	// Generate unique short code
-	shortCode, err := s.generateShortCode()
+	// Check if URL already exists using Redis cache for fast lookup
+	existingShortCode, err := s.getExistingShortCode(originalURL)
+	if err == nil && existingShortCode != "" {
+		// URL already exists, return existing short code
+		response := &models.ShortenResponse{
+			ShortCode:   existingShortCode,
+			ShortURL:    fmt.Sprintf("%s/%s", s.baseURL, existingShortCode),
+			OriginalURL: originalURL,
+			CreatedAt:   time.Now(), // We don't have the exact creation time from cache
+			ExpiresAt:   expiresAt,
+		}
+		return response, nil
+	}
+
+	// Get pre-generated short code
+	preGenURL, err := s.urlRepo.GetUnusedPreGeneratedURL()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate short code: %w", err)
+		// Fallback to generating new short code if no pre-generated ones available
+		shortCode, genErr := s.generateShortCode()
+		if genErr != nil {
+			return nil, fmt.Errorf("failed to generate short code: %w", genErr)
+		}
+		preGenURL = &models.PreGeneratedURL{ShortCode: shortCode}
+	}
+
+	// Mark pre-generated URL as used
+	err = s.urlRepo.MarkPreGeneratedURLAsUsed(preGenURL.ShortCode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to mark pre-generated URL as used: %w", err)
 	}
 
 	// Create URL record
 	urlModel := &models.URL{
-		ShortCode:   shortCode,
+		ShortCode:   preGenURL.ShortCode,
 		OriginalURL: originalURL,
 		ExpiresAt:   expiresAt,
 		IsActive:    true,
+		IsUsed:      true,
 	}
 
 	err = s.urlRepo.Create(urlModel)
@@ -67,8 +110,8 @@ func (s *urlService) ShortenURL(originalURL string, expiresAt *time.Time) (*mode
 		return nil, fmt.Errorf("failed to create URL: %w", err)
 	}
 
-	// Cache the URL in Redis
-	cacheKey := fmt.Sprintf("url:%s", shortCode)
+	// Cache the URL in Redis with both directions
+	cacheKey := fmt.Sprintf("url:%s", preGenURL.ShortCode)
 	cacheValue := originalURL
 	cacheExpiration := 24 * time.Hour
 
@@ -78,14 +121,23 @@ func (s *urlService) ShortenURL(originalURL string, expiresAt *time.Time) (*mode
 
 	err = s.redisClient.Set(context.Background(), cacheKey, cacheValue, cacheExpiration).Err()
 	if err != nil {
-		// Log error but don't fail the request
 		fmt.Printf("Failed to cache URL: %v\n", err)
 	}
 
+	// Also cache reverse mapping for duplicate detection
+	reverseCacheKey := fmt.Sprintf("reverse:%s", originalURL)
+	err = s.redisClient.Set(context.Background(), reverseCacheKey, preGenURL.ShortCode, cacheExpiration).Err()
+	if err != nil {
+		fmt.Printf("Failed to cache reverse URL mapping: %v\n", err)
+	}
+
+	// Trigger pre-generation if pool is low
+	go s.checkAndRefillPool()
+
 	// Build response
 	response := &models.ShortenResponse{
-		ShortCode:   shortCode,
-		ShortURL:    fmt.Sprintf("%s/%s", s.baseURL, shortCode),
+		ShortCode:   preGenURL.ShortCode,
+		ShortURL:    fmt.Sprintf("%s/%s", s.baseURL, preGenURL.ShortCode),
 		OriginalURL: originalURL,
 		CreatedAt:   urlModel.CreatedAt,
 		ExpiresAt:   expiresAt,
@@ -154,10 +206,10 @@ func (s *urlService) GetAnalytics(shortCode string) (*models.AnalyticsResponse, 
 
 	// Build response
 	response := &models.AnalyticsResponse{
-		ShortCode:   shortCode,
-		OriginalURL: urlModel.OriginalURL,
-		TotalClicks: totalClicks,
-		UniqueIPs:   uniqueIPs,
+		ShortCode:    shortCode,
+		OriginalURL:  urlModel.OriginalURL,
+		TotalClicks:  totalClicks,
+		UniqueIPs:    uniqueIPs,
 		RecentClicks: recentClicks,
 	}
 
@@ -177,7 +229,7 @@ func (s *urlService) GetAnalytics(shortCode string) (*models.AnalyticsResponse, 
 
 func (s *urlService) generateShortCode() (string, error) {
 	const maxAttempts = 10
-	
+
 	for i := 0; i < maxAttempts; i++ {
 		// Generate 4 random bytes
 		bytes := make([]byte, 4)
@@ -185,21 +237,21 @@ func (s *urlService) generateShortCode() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		
+
 		// Convert to hex string and take first 8 characters
 		shortCode := hex.EncodeToString(bytes)[:8]
-		
+
 		// Check if short code already exists
 		exists, err := s.urlRepo.IsShortCodeExists(shortCode)
 		if err != nil {
 			return "", err
 		}
-		
+
 		if !exists {
 			return shortCode, nil
 		}
 	}
-	
+
 	return "", fmt.Errorf("failed to generate unique short code after %d attempts", maxAttempts)
 }
 
@@ -238,4 +290,84 @@ func isValidURL(rawURL string) bool {
 	}
 
 	return parsedURL.Scheme != "" && parsedURL.Host != ""
+}
+
+// Helper methods for pre-generation and optimization
+func (s *urlService) getExistingShortCode(originalURL string) (string, error) {
+	reverseCacheKey := fmt.Sprintf("reverse:%s", originalURL)
+	shortCode, err := s.redisClient.Get(context.Background(), reverseCacheKey).Result()
+	if err != nil {
+		return "", err
+	}
+	return shortCode, nil
+}
+
+func (s *urlService) checkAndRefillPool() {
+	count, err := s.urlRepo.GetPreGeneratedURLCount()
+	if err != nil {
+		fmt.Printf("Failed to get pre-generated URL count: %v\n", err)
+		return
+	}
+
+	if count < s.minPoolSize {
+		go s.preGenerateURLs(s.preGenBatchSize)
+	}
+}
+
+func (s *urlService) preGenerateURLs(count int) {
+	for i := 0; i < count; i++ {
+		shortCode, err := s.generateShortCode()
+		if err != nil {
+			fmt.Printf("Failed to generate short code for pre-generation: %v\n", err)
+			continue
+		}
+
+		err = s.urlRepo.CreatePreGeneratedURL(shortCode)
+		if err != nil {
+			fmt.Printf("Failed to create pre-generated URL: %v\n", err)
+		}
+	}
+}
+
+func (s *urlService) StartPreGeneration() error {
+	s.preGenMutex.Lock()
+	defer s.preGenMutex.Unlock()
+
+	if s.isPreGenRunning {
+		return fmt.Errorf("pre-generation is already running")
+	}
+
+	s.isPreGenRunning = true
+
+	// Initial pre-generation
+	go s.preGenerateURLs(s.maxPoolSize)
+
+	// Start background pre-generation routine
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute) // Check every 5 minutes
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				s.checkAndRefillPool()
+			case <-s.stopPreGen:
+				return
+			}
+		}
+	}()
+
+	return nil
+}
+
+func (s *urlService) StopPreGeneration() {
+	s.preGenMutex.Lock()
+	defer s.preGenMutex.Unlock()
+
+	if !s.isPreGenRunning {
+		return
+	}
+
+	s.isPreGenRunning = false
+	s.stopPreGen <- true
 }

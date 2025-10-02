@@ -44,6 +44,13 @@ func main() {
 	// Initialize service
 	urlService := service.NewURLService(urlRepo, analyticsRepo, redisClient, cfg.BaseURL)
 
+	// Start pre-generation service
+	if err := urlService.StartPreGeneration(); err != nil {
+		log.Printf("Failed to start pre-generation service: %v", err)
+	} else {
+		log.Println("Pre-generation service started successfully")
+	}
+
 	// Initialize handlers
 	urlHandler := handlers.NewURLHandler(urlService)
 	analyticsHandler := handlers.NewAnalyticsHandler(urlService)

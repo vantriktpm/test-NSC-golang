@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 
-	_ "github.com/lib/pq"
 	"github.com/go-redis/redis/v8"
+	_ "github.com/lib/pq"
 )
 
 // Initialize creates a new database connection
@@ -56,7 +56,8 @@ func CreateTables(db *sql.DB) error {
 			original_url TEXT NOT NULL,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			expires_at TIMESTAMP,
-			is_active BOOLEAN DEFAULT TRUE
+			is_active BOOLEAN DEFAULT TRUE,
+			is_used BOOLEAN DEFAULT TRUE
 		)`,
 		`CREATE TABLE IF NOT EXISTS analytics (
 			id SERIAL PRIMARY KEY,
@@ -66,9 +67,17 @@ func CreateTables(db *sql.DB) error {
 			referer TEXT,
 			clicked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
+		`CREATE TABLE IF NOT EXISTS pre_generated_urls (
+			id SERIAL PRIMARY KEY,
+			short_code VARCHAR(8) UNIQUE NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			is_used BOOLEAN DEFAULT FALSE
+		)`,
 		`CREATE INDEX IF NOT EXISTS idx_urls_short_code ON urls(short_code)`,
 		`CREATE INDEX IF NOT EXISTS idx_analytics_url_id ON analytics(url_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_analytics_clicked_at ON analytics(clicked_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_pre_generated_urls_unused ON pre_generated_urls(is_used) WHERE is_used = FALSE`,
+		`CREATE INDEX IF NOT EXISTS idx_pre_generated_urls_short_code ON pre_generated_urls(short_code)`,
 	}
 
 	for _, query := range queries {

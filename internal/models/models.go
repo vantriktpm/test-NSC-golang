@@ -6,12 +6,20 @@ import (
 
 // URL represents a shortened URL
 type URL struct {
-	ID          int       `json:"id" db:"id"`
-	ShortCode   string    `json:"short_code" db:"short_code"`
-	OriginalURL string    `json:"original_url" db:"original_url"`
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`
+	ID          int        `json:"id" db:"id"`
+	ShortCode   string     `json:"short_code" db:"short_code"`
+	OriginalURL string     `json:"original_url" db:"original_url"`
+	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
 	ExpiresAt   *time.Time `json:"expires_at,omitempty" db:"expires_at"`
-	IsActive    bool      `json:"is_active" db:"is_active"`
+	IsActive    bool       `json:"is_active" db:"is_active"`
+	IsUsed      bool       `json:"is_used" db:"is_used"`
+}
+
+// PreGeneratedURL represents a pre-generated short code waiting to be used
+type PreGeneratedURL struct {
+	ShortCode string    `json:"short_code" db:"short_code"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	IsUsed    bool      `json:"is_used" db:"is_used"`
 }
 
 // Analytics represents click analytics for a URL
@@ -26,16 +34,16 @@ type Analytics struct {
 
 // ShortenRequest represents the request to shorten a URL
 type ShortenRequest struct {
-	URL      string     `json:"url" binding:"required"`
+	URL       string     `json:"url" binding:"required"`
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 // ShortenResponse represents the response after shortening a URL
 type ShortenResponse struct {
-	ShortCode   string    `json:"short_code"`
-	ShortURL    string    `json:"short_url"`
-	OriginalURL string    `json:"original_url"`
-	CreatedAt   time.Time `json:"created_at"`
+	ShortCode   string     `json:"short_code"`
+	ShortURL    string     `json:"short_url"`
+	OriginalURL string     `json:"original_url"`
+	CreatedAt   time.Time  `json:"created_at"`
 	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
 }
 
