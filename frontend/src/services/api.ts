@@ -50,21 +50,19 @@ export interface ShortenResponse {
 export interface AnalyticsResponse {
   shortCode: string
   originalUrl: string
-  shortUrl: string
-  clickCount: number
-  createdAt: string
-  lastAccessedAt: string | null
-  topReferrers: Array<{
-    referrer: string
+  totalClicks: number
+  uniqueIPs: number
+  topReferers: Array<{
+    referer: string
     count: number
   }>
-  topUserAgents: Array<{
+  recentClicks: Array<{
+    id: number
+    urlId: number
+    ipAddress: string
     userAgent: string
-    count: number
-  }>
-  dailyStats: Array<{
-    date: string
-    clicks: number
+    referer: string
+    clickedAt: string
   }>
 }
 
@@ -239,13 +237,10 @@ export const bulkApi = {
       urlApi.getAnalytics(code).catch(error => ({
         shortCode: code,
         originalUrl: 'ERROR',
-        shortUrl: 'ERROR',
-        clickCount: 0,
-        createdAt: new Date().toISOString(),
-        lastAccessedAt: null,
-        topReferrers: [],
-        topUserAgents: [],
-        dailyStats: [],
+        totalClicks: 0,
+        uniqueIPs: 0,
+        topReferers: [],
+        recentClicks: [],
         error: error.message
       }))
     )
