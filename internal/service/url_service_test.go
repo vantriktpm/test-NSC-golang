@@ -55,6 +55,30 @@ func (m *MockURLRepository) IsShortCodeExists(shortCode string) (bool, error) {
 	return args.Bool(0), args.Error(1)
 }
 
+// Pre-generated URL methods
+func (m *MockURLRepository) CreatePreGeneratedURL(shortCode string) error {
+	args := m.Called(shortCode)
+	return args.Error(0)
+}
+
+func (m *MockURLRepository) GetUnusedPreGeneratedURL() (*models.PreGeneratedURL, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.PreGeneratedURL), args.Error(1)
+}
+
+func (m *MockURLRepository) MarkPreGeneratedURLAsUsed(shortCode string) error {
+	args := m.Called(shortCode)
+	return args.Error(0)
+}
+
+func (m *MockURLRepository) GetPreGeneratedURLCount() (int, error) {
+	args := m.Called()
+	return args.Int(0), args.Error(1)
+}
+
 type MockAnalyticsRepository struct {
 	mock.Mock
 }
@@ -110,7 +134,13 @@ func TestURLService_ShortenURL(t *testing.T) {
 			name: "Valid URL",
 			url:  "https://example.com",
 			setupMocks: func() {
-				mockURLRepo.On("IsShortCodeExists", mock.AnythingOfType("string")).Return(false, nil)
+				preGenURL := &models.PreGeneratedURL{
+					ShortCode: "abc12345",
+					CreatedAt: time.Now(),
+					IsUsed:    false,
+				}
+				mockURLRepo.On("GetUnusedPreGeneratedURL").Return(preGenURL, nil)
+				mockURLRepo.On("MarkPreGeneratedURLAsUsed", "abc12345").Return(nil)
 				mockURLRepo.On("Create", mock.AnythingOfType("*models.URL")).Return(nil)
 			},
 			expectError: false,
